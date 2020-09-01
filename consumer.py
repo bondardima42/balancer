@@ -3,6 +3,7 @@ import os
 import signal
 import time
 import gmqtt
+import logging
 
 
 STOP = asyncio.Event()
@@ -13,9 +14,8 @@ def on_connect(client, flags, rc, properties):
 
 
 def on_message(client, topic, payload, qos, properties):
-    # print(topic, 'RECV MSG:', payload)
     worker_num = topic.split("/")[-1]
-    print("Worker:", worker_num, payload.decode())
+    print("Worker:", worker_num, 'Payload:', payload)
 
 
 def on_disconnect(client, packet, exc=None):
@@ -51,9 +51,8 @@ if __name__ == '__main__':
     loop = asyncio.get_event_loop()
 
     host = 'ru-mqtt.flespi.io'
-    # token = os.environ.get('FLESPI_TOKEN')
-    token = '2ZfcrizySUWW7H8KTYAOLyYGKX5kIWQyJTB010nKK9wIEsgoeG0N4OkFAdN60tuz'
-
+    token = os.environ.get('FLESPI_TOKEN')
+    
     loop.add_signal_handler(signal.SIGINT, ask_exit)
     loop.add_signal_handler(signal.SIGTERM, ask_exit)
     loop.run_until_complete(main(host, token))

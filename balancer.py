@@ -2,12 +2,14 @@ import asyncio
 import os
 import signal
 import time
+import json
 import gmqtt
 
 
 STOP = asyncio.Event()
 workers = {}
-queue = []
+queue = asyncio.Queue()
+last_worker_num = 0
 
 
 def on_connect(client, flags, rc, properties):
@@ -15,18 +17,24 @@ def on_connect(client, flags, rc, properties):
 
 
 def on_message(client, topic, payload, qos, properties):
-    print(topic, 'RECV MSG:', payload)
+    print('Topic:', topic, 'Payload:', payload)
+    global last_worker_num
 
     if topic == 'balancer':
-        queue.append(payload)
+        queue.put_nowait(payload)
     elif topic == 'worker-register':
-        worker_num = len(workers.keys()) + 1
-        workers[payload] = worker_num
-        client.publish('worker-registered', payload, worker_num=worker_num)
+        worker_hex = payload.decode('utf-8')
+        worker_num = last_worker_num + 1
+        workers[worker_hex] = worker_num
+        data = {"worker_num": worker_num, "worker_hex": worker_hex}
+
+        client.publish('worker-registered', json.dumps(data))
+        last_worker_num = worker_num
     elif topic == 'worker-unregister':
+        worker_hex = payload.decode('utf-8')
         try:
-            workers.pop(payload)
-        except IndexError:
+            workers.pop(worker_hex)
+        except KeyError:
             pass
 
 
@@ -47,16 +55,13 @@ async def send_messages(client):
         if STOP.is_set():
             break
 
-        if not queue:
-            await asyncio.sleep(0.5)
+        if queue.empty() or not workers:
+            await asyncio.sleep(1)
 
-        for _, worker_num in workers.items():
-            try:
-                payload = queue.pop(0)
-            except IndexError:
-                continue
-            
+        for _, worker_num in list(workers.items()):
+            payload = await queue.get()
             client.publish(f'balancer/worker/{worker_num}', payload, qos=1)
+            queue.task_done()
 
 
 async def main(broker_host, token):
@@ -75,8 +80,6 @@ async def main(broker_host, token):
     client.subscribe('worker-unregister', qos=1)
 
     await send_messages(client)
-
-    await STOP.wait()
     await client.disconnect()
 
 
@@ -84,8 +87,7 @@ if __name__ == '__main__':
     loop = asyncio.get_event_loop()
 
     host = 'ru-mqtt.flespi.io'
-    # token = os.environ.get('FLESPI_TOKEN')
-    token = '2ZfcrizySUWW7H8KTYAOLyYGKX5kIWQyJTB010nKK9wIEsgoeG0N4OkFAdN60tuz'
+    token = os.environ.get('FLESPI_TOKEN')
 
     loop.add_signal_handler(signal.SIGINT, ask_exit)
     loop.add_signal_handler(signal.SIGTERM, ask_exit)
