@@ -29,6 +29,18 @@ def ask_exit(*args):
     STOP.set()
 
 
+async def send_messages(client):
+    while True:
+        payload = str(time.time())
+        client.publish('balancer', payload, qos=1)
+        print(payload)
+        await asyncio.sleep(1)
+
+        if STOP.is_set():
+            await client.disconnect()
+            break
+
+
 async def main(broker_host, token):
     client_id = f"producer-{uuid.uuid4().hex}"
     client = gmqtt.Client(client_id)
@@ -41,16 +53,7 @@ async def main(broker_host, token):
     client.set_auth_credentials(token, None)
     client.set_config({'reconnect_retries': 10, 'reconnect_delay': 60})
     await client.connect(broker_host, raise_exc=True)
-
-    while True:
-        payload = str(time.time())
-        client.publish('balancer', payload, qos=1)
-        print(payload)
-        await asyncio.sleep(1)
-
-        if STOP.is_set():
-            await client.disconnect()
-            break
+    await send_messages(client)
 
 
 if __name__ == '__main__':
