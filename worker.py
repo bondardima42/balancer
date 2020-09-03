@@ -8,8 +8,24 @@ import gmqtt
 
 
 STOP = asyncio.Event()
-worker_hex = uuid.uuid4().hex
-worker_num = None
+
+
+class Worker():
+    worker_hex = None
+    number = None
+
+    def __init__(self, number=None):
+        self.worker_hex = uuid.uuid4().hex
+        self.number = number
+
+    def register(self, number):
+        self.number = number
+
+    def is_registered(self):
+        return self.number is not None
+
+
+worker = Worker()
 
 
 def on_connect(client, flags, rc, properties):
@@ -17,19 +33,18 @@ def on_connect(client, flags, rc, properties):
 
 
 def on_message(client, topic, payload, qos, properties):
-    global worker_num
-
     if topic == 'worker-registered':
         data = json.loads(payload.decode('utf-8'))
-        _worker_hex = data.get("worker_hex")
+        worker_hex = data.get("worker_hex")
+        worker_num = data.get('worker_num')
 
-        if not worker_num and _worker_hex == worker_hex:
-            worker_num = data.get('worker_num')
-            print(f'Subscribe to balancer/worker/{worker_num}')
-            client.subscribe(f'balancer/worker/{worker_num}', qos=1)
+        if not worker.is_registered() and worker.worker_hex == worker_hex:
+            worker.register(worker_num)
+            print(f'Subscribe to balancer/worker/{worker.number}')
+            client.subscribe(f'balancer/worker/{worker.number}', qos=1)
     else:
         print('Topic:', topic, 'Payload:', payload)
-        client.publish(f'result/worker/{worker_num}', payload, qos=1)
+        client.publish(f'result/worker/{worker.number}', payload, qos=1)
 
 
 def on_disconnect(client, packet, exc=None):
@@ -45,8 +60,8 @@ def ask_exit(*args):
 
 
 async def main(broker_host, token):
-    will_message = gmqtt.Message('worker-unregister', worker_hex, will_delay_interval=2)
-    client = gmqtt.Client(f'worker-{worker_hex}', will_message=will_message)
+    will_message = gmqtt.Message('worker-unregister', worker.worker_hex, will_delay_interval=2)
+    client = gmqtt.Client(f'worker-{worker.worker_hex}', will_message=will_message)
 
     client.on_connect = on_connect
     client.on_message = on_message
@@ -56,7 +71,7 @@ async def main(broker_host, token):
     client.set_auth_credentials(token, None)
     await client.connect(broker_host)
 
-    client.publish('worker-register', worker_hex, qos=1)
+    client.publish('worker-register', worker.worker_hex, qos=1)
     client.subscribe('worker-registered', qos=1)
 
     await STOP.wait()

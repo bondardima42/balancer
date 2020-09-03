@@ -7,9 +7,91 @@ import gmqtt
 
 
 STOP = asyncio.Event()
-workers = {}
-queue = asyncio.Queue()
-last_worker_num = 0
+messages_queue = asyncio.Queue()
+
+
+class Worker():
+    worker_hex = None
+    number = None
+    deleted = False
+
+    def __init__(self, worker_hex, number):
+        self.worker_hex = worker_hex
+        self.number = number
+
+    def delete(self):
+        self.deleted = True
+
+
+class WorkersStorage():
+    last_worker_num = 0
+    workers = {}
+    iterator = None
+    to_delete = {}
+    to_add = {}
+
+    async def next_worker(self):
+        while True:
+            if STOP.is_set():
+                return
+
+            worker = self.next_worker_nowait()
+            if worker:
+                return worker
+            else:
+                await asyncio.sleep(1)
+
+    def next_worker_nowait(self):
+        if self.is_empty():
+            return None
+
+        if not self.iterator:
+            self.iterator = iter(self.workers.values())
+
+        try:
+            worker = next(self.iterator)
+            if worker.deleted:
+                worker = self.next_worker_nowait()
+            return worker
+        except StopIteration:
+            self.iterator = None
+            self.update_workers()
+            return self.next_worker_nowait()
+
+    def get(self, worker_hex):
+        return self.workers.get(worker_hex) or self.to_add.get(worker_hex)
+
+    def get_all_workers(self):
+        return self.workers
+
+    def add(self, worker_hex):
+        self.last_worker_num += 1
+        worker = Worker(worker_hex, self.last_worker_num)
+        self.to_add[worker_hex] = worker
+
+        if self.is_empty():
+            self.update_workers()        
+        return worker
+
+    def delete(self, worker_hex):
+        worker = self.get(worker_hex)
+        if worker:
+            worker.delete()
+            self.to_delete[worker_hex] = worker
+
+    def is_empty(self):
+        return not self.workers
+
+    def update_workers(self):
+        self.workers.update(self.to_add)
+        self.to_add = {}
+
+        for worker_hex, _ in self.to_delete.items():
+            self.workers.pop(worker_hex)
+        self.to_delete = {}
+
+
+workers_storage = WorkersStorage()
 
 
 def on_connect(client, flags, rc, properties):
@@ -18,24 +100,17 @@ def on_connect(client, flags, rc, properties):
 
 def on_message(client, topic, payload, qos, properties):
     print('Topic:', topic, 'Payload:', payload)
-    global last_worker_num
 
     if topic == 'balancer':
-        queue.put_nowait(payload)
+        messages_queue.put_nowait(payload)
     elif topic == 'worker-register':
         worker_hex = payload.decode('utf-8')
-        worker_num = last_worker_num + 1
-        workers[worker_hex] = worker_num
-        data = {"worker_num": worker_num, "worker_hex": worker_hex}
-
+        worker = workers_storage.add(worker_hex)
+        data = {"worker_num": worker.number, "worker_hex": worker.worker_hex}
         client.publish('worker-registered', json.dumps(data))
-        last_worker_num = worker_num
     elif topic == 'worker-unregister':
         worker_hex = payload.decode('utf-8')
-        try:
-            workers.pop(worker_hex)
-        except KeyError:
-            pass
+        workers_storage.delete(worker_hex)
 
 
 def on_disconnect(client, packet, exc=None):
@@ -53,15 +128,12 @@ def ask_exit(*args):
 async def send_messages(client):
     while True:
         if STOP.is_set():
-            break
+            return
 
-        if queue.empty() or not workers:
-            await asyncio.sleep(1)
-
-        for _, worker_num in list(workers.items()):
-            payload = await queue.get()
-            client.publish(f'balancer/worker/{worker_num}', payload, qos=1)
-            queue.task_done()
+        payload = await messages_queue.get()
+        worker = await workers_storage.next_worker()
+        client.publish(f'balancer/worker/{worker.number}', payload, qos=1)
+        messages_queue.task_done()
 
 
 async def main(broker_host, token):
