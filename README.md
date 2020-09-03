@@ -11,6 +11,11 @@
 Каждый из файлов запускается в отдельной вкладке терминала, worker.py и producer.py можно запустить любое количество. balancer.py и consumer.py только 1.
 Перед запуском файлов необходимо установить значение переменной окружения FLESPI_TOKEN.
 
+## Requirements
+- python 3.6+
+- https://flespi.com/mqtt-broker
+- https://github.com/wialon/gmqtt
+
 ## Example
 
 ```bash
