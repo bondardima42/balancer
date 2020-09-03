@@ -11,8 +11,9 @@
 Каждый из файлов запускается в отдельной вкладке терминала, worker.py и producer.py можно запустить любое количество. balancer.py и consumer.py только 1.
 Перед запуском файлов необходимо установить значение переменной окружения FLESPI_TOKEN.
 
-Пример запуска:
-```
+## Example
+
+```bash
 export FLESPI_TOKEN=JfMtR9L2fvNAQnb2uQxzQoMWW3F2VvhszSLgPn6ViDsmXkeh0zFENhqzaWrTfxcC
 python balancer.py
 ```
