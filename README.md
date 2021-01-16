@@ -10,7 +10,7 @@
 
 Всё общение между сервисами осуществляется через протокол MQTT.
 Каждый из файлов запускается в отдельной вкладке терминала, worker.py и producer.py можно запустить любое количество, balancer.py и consumer.py только 1.
-Перед запуском файлов необходимо установить значение переменной окружения FLESPI_TOKEN.
+Перед запуском файлов необходимо установить значения переменным окружения FLESPI_TOKEN и FLESPI_HOST. Их можно получить зарегистрировавшить на https://flespi.io/. 
 
 ## Requirements
 - python 3.6+
@@ -20,6 +20,7 @@
 ## Example
 
 ```bash
+export FLESPI_HOST=ru-mqtt.flespi.io
 export FLESPI_TOKEN=JfMtR9L2fvNAQnb2uQxzQoMWW3F2VvhszSLgPn6ViDsmXkeh0zFENhqzaWrTfxcC
 python balancer.py
 ```

@@ -1,0 +1,8 @@
+BALANCER_TOPIC = 'balancer'
+BALANCER_WORKER_TOPIC = 'balancer/worker/'
+WORKER_RESULT_TOPIC = 'result/worker/'
+ALL_WORKERS_RESULT_TOPIC = f'{WORKER_RESULT_TOPIC}+'
+
+WORKER_REGISTRATION_TOPIC = 'worker-register'
+WORKER_REGISTRED_TOPIC = 'worker-registered'
+WORKER_UNREGISTER_TOPIC = 'worker-unregister'
